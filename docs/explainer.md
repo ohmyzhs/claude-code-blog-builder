@@ -48,10 +48,11 @@
 - `duplicate-check.js` (6-gram Jaccard)
 - 의료/뷰티 키워드면 `medical-law-checker` 추가 호출
 
-### 5. 이미지 생성
-- `generate-images.js` → Nano Banana Pro REST 호출
-- 4종: 썸네일(16:9) / 인포그래픽(2:3) / 인용 카드(1:1) / 프로세스(4:3)
-- 브랜드 시스템(컬러/이름)은 `.env` 기반
+### 5. 이미지 디자인 + 캡처 (외부 API 0)
+- `image-designer` 서브에이전트가 글마다 4종 HTML 을 처음부터 디자인 (컬러 팔레트 6종 × 레이아웃 패턴 다수 조합)
+- `generate-images.js` 가 시스템 Chrome/Edge 로 PNG 캡처
+- 4종: 썸네일(16:9, 1200×675) / 인포그래픽(2:3, 1080×1620) / 인용 카드(1:1, 1080×1080) / 프로세스(4:3, 1200×900)
+- 브랜드명·로고 박지 않음. 외부 이미지 API 호출 0건.
 
 ### 6. 발행 어시스턴트
 - `preview.js` → self-contained HTML → 브라우저 자동 오픈

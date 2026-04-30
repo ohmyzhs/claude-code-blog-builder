@@ -47,7 +47,7 @@ claude-code-blog-builder/
 │
 ├── scripts/
 │   ├── research.js              # 네이버 API 키워드 리서치
-│   ├── generate-images.js       # Nano Banana Pro 이미지 생성
+│   ├── generate-images.js       # HTML→PNG headless Chrome 캡처기
 │   ├── quality-check.js         # 7항목 결정론 채점
 │   ├── duplicate-check.js       # 6-gram Jaccard 유사도
 │   ├── hook-post-write.js       # PostToolUse 훅 라우터
@@ -55,10 +55,7 @@ claude-code-blog-builder/
 │   ├── setup-tone-fetch.js      # 블로그 URL 본문 수집
 │   └── sanitize-check.sh        # push 전 게이트
 │
-├── templates/
-│   ├── thumbnail.html
-│   ├── infographic.html
-│   └── quote-card.html
+├── templates/                   # (deprecated — README.md 참조)
 │
 ├── .claude/
 │   ├── settings.json            # PostToolUse 훅 등록
@@ -75,6 +72,7 @@ claude-code-blog-builder/
 │       ├── setup-interviewer.md
 │       ├── blog-researcher.md
 │       ├── blog-writer.md
+│       ├── image-designer.md       # 글마다 4종 인포그래픽 HTML 직접 디자인
 │       ├── blog-quality-reviewer.md
 │       └── medical-law-checker.md
 │
@@ -129,21 +127,21 @@ API 인증 실패 시 웹 검색 기반으로 대체 리서치.
 
 ### STEP 2: 콘텐츠 생성
 
-**⚠️ 필수 사전 작업 — 글을 쓰기 전에 반드시 아래 파일을 Read로 읽을 것:**
+**사전 로드 — 아래 파일이 존재하면 Read로 읽고, 없으면 그 항목은 건너뛸 것:**
 
-1. `knowledge/brand-facts.md` — 회사 수치·인증 (Single Source of Truth, **이 파일 외의 숫자 사용 금지**)
-2. `knowledge/tone-samples/real-blog-posts.txt` — 회사 블로그 문체 학습 (있을 경우)
-3. `knowledge/patterns/writing-playbook.txt` — 글쓰기 패턴 가이드 (있을 경우)
-4. `knowledge/banned-words.json` — 금칙어 + 도메인 단어
-5. `output/_index.json` — 최근 사용한 패턴/도입부 확인 → **의도적으로 다른 조합 선택**
-6. (수치 인용 시) `knowledge/conversion-benchmarks.md`
+1. `knowledge/brand-facts.md` *(선택)* — 회사 수치·인증. **있으면** 이 파일의 숫자만 사용. **없거나 placeholder면** 회사 고유 수치를 본문에 박지 말고 일반 가이드 모드로 작성.
+2. `knowledge/tone-samples/real-blog-posts.txt` *(선택)* — 회사 블로그 문체 학습. 없으면 보편적 한국어 블로그 문체로.
+3. `knowledge/patterns/writing-playbook.txt` *(선택)* — 글쓰기 패턴 가이드.
+4. `knowledge/banned-words.json` — 금칙어 + 도메인 단어 (이 파일은 항상 존재)
+5. `output/_index.json` *(선택)* — 최근 사용한 패턴/도입부 확인 → **의도적으로 다른 조합 선택**
+6. `knowledge/conversion-benchmarks.md` *(선택, 수치 인용 시)*
 
-> `brand-facts.md`가 placeholder 상태(`[PLACEHOLDER]`로 시작)면 먼저 사용자에게 `/setup` 실행을 안내하고 멈출 것.
+> `brand-facts.md`가 없거나 placeholder 상태여도 **중단하지 말고 진행**합니다. 이 경우 회사 고유 수치(자사 매출/고객 수/업력 등)를 만들어내지 말고, 검증 가능한 일반 시장 통계와 일반론 위주로 작성하세요.
 
 #### 글쓰기 원칙
 
-- `brand-facts.md`에 없는 수치 사용 금지 (픽션 금지). AI 추측 숫자는 신뢰를 박살낸다.
-- 회사 톤 시그니처 표현(`tone-samples`에서 추출)을 자연스럽게 2개 이상 삽입
+- 검증 불가능한 회사 고유 수치를 만들어내지 말 것 (픽션 금지). `brand-facts.md`가 있으면 그 안의 숫자만 사용. 없으면 회사 자랑 수치 자체를 회피하고 일반 시장 데이터·검증 가능한 출처 기반으로만 작성.
+- `tone-samples`가 있으면 시그니처 표현 2개 이상 자연 삽입. 없으면 보편적 한국어 블로그 문체.
 - 도입부 4줄 공식: 문제 → 손실 → 자격 → 끝까지 읽으면 얻을 것
 - A.E.A 구조: 권위(Authority) → 근거(Evidence) → 행동(Action)
 - 본문 1,500~3,000자, 메인 키워드 5~12회 자연 삽입
@@ -161,31 +159,36 @@ API 인증 실패 시 웹 검색 기반으로 대체 리서치.
 3. `metadata.json` — 제목, 태그, 메타설명, 키워드 리포트
 4. `guide.md` — 편집 가이드 (이미지 위치, 수정 포인트)
 
-### STEP 3: 이미지 생성
+### STEP 3: 이미지 디자인 + 캡처 (2단계, 외부 API 0)
 
-Nano Banana Pro (Gemini 3 Pro Image) API 사용. 외부 의존성 0.
+#### 3a. 디자인 — `image-designer` 서브에이전트
+글이 작성된 직후 `image-designer` 를 호출. 이 에이전트는 `post.md` 와 `metadata.json` 을 직접 읽고, 글의 무드·정보 구조에 맞춰 **매번 다른 컬러 팔레트(6종 중 1) + 다른 레이아웃 패턴(썸네일 8 × 인포그래픽 12 × 인용 6 × 프로세스 8 조합)**을 선택해 4개 HTML 을 처음부터 디자인합니다. 같은 골격에 데이터만 갈아끼우는 방식은 사용하지 않습니다.
 
-브랜드 시스템은 `.env`로 주입 (`/setup-domain`이 자동 설정):
-- `BRAND_NAME` — 이미지에 박힐 브랜드명
-- `BRAND_BG_COLOR` / `BRAND_FG_COLOR` / `BRAND_ACCENT` — 컬러팔레트
-
-```bash
-GEMINI_API_KEY=your_key node scripts/generate-images.js \
-  --title "글 제목" \
-  --keyword "키워드" \
-  --points "포인트1|||포인트2|||포인트3" \
-  --quote "핵심 문구" \
-  --steps "단계1|||단계2|||단계3" \
-  --output "output/폴더/images"
+출력:
+```
+output/<폴더>/images/_html/thumbnail.html      (16:9, 1200×675)
+output/<폴더>/images/_html/infographic.html    (2:3,  1080×1620)
+output/<폴더>/images/_html/quote-card.html     (1:1,  1080×1080)
+output/<폴더>/images/_html/process.html        (4:3,  1200×900)
 ```
 
-생성 이미지 4종:
-1. **썸네일** (16:9) — 메인 키워드 + 브랜드 로고
-2. **인포그래픽** (2:3) — 핵심 포인트 시각화
-3. **인용 카드** (1:1) — 핵심 문구 강조
-4. **프로세스 다이어그램** (4:3) — 단계별 시각화
+각 HTML 은 self-contained (인라인 CSS, Google Fonts CDN 만 외부 자원). 디자인 가이드·패턴 라이브러리는 [.claude/agents/image-designer.md](.claude/agents/image-designer.md) 참조.
 
-매번 고유 이미지 (동일 이미지 재사용은 네이버 유사 문서 판정 트리거).
+#### 3b. 캡처 — `scripts/generate-images.js` (headless Chrome)
+```bash
+node scripts/generate-images.js \
+  --input  "output/<폴더>/images/_html" \
+  --output "output/<폴더>/images"
+```
+시스템에 설치된 Chrome 또는 Edge 를 자동 탐지하여 PNG 로 캡처. 외부 API 호출 0건, 비용 0원, 워터마크 없음. 자동 탐지 실패 시 환경변수 `CHROME_PATH` 로 직접 지정.
+
+생성 이미지 4종:
+1. **썸네일** (16:9, 1200×675) — 글의 가장 강한 메시지 1개
+2. **인포그래픽** (2:3, 1080×1620) — 본문 핵심 데이터·논리·비교 시각화
+3. **인용 카드** (1:1, 1080×1080) — 글에서 가장 강력한 한 문장
+4. **프로세스 다이어그램** (4:3, 1200×900) — 단계·순서·흐름 (없으면 구조 다이어그램)
+
+이미지에는 브랜드명·로고·서명을 박지 않습니다. 글마다 팔레트·레이아웃이 다르므로 픽셀 해시는 매번 다름 → 네이버 유사 문서 판정 회피.
 
 ### STEP 4: 품질 검증 + 유사도 검사
 
@@ -246,25 +249,22 @@ output/2026-04-08_my-keyword/
 
 ## 환경 설정
 
-`.env` 파일 (`.env.example` 참조):
+`.env` 파일 (`.env.example` 참조 — 모두 선택사항):
 
 ```
 # 네이버 개발자센터 (선택 — 없으면 웹 검색으로 대체)
 NAVER_CLIENT_ID=your_client_id
 NAVER_CLIENT_SECRET=your_client_secret
 
-# Nano Banana Pro 이미지 생성 (필수)
-# Google AI Studio (aistudio.google.com)에서 무료 발급
-GEMINI_API_KEY=your_gemini_api_key
-
-# 브랜드 시스템 (/setup-domain이 자동 설정)
-BRAND_NAME=YOUR BRAND
-BRAND_BG_COLOR=#F7F6F2
-BRAND_FG_COLOR=#1A1A1A
-BRAND_ACCENT=#D97A3A
+# 선택: Chrome / Edge 자동 탐지가 실패할 때만 직접 경로 지정
+# CHROME_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 ```
 
-별도 `npm install` 불필요. Node 20+ 내장 fetch만 사용.
+이미지 생성용 외부 API 키는 필요하지 않습니다. 별도 `npm install` 불필요 — Node 20+ 내장 기능 + 시스템 Chrome/Edge 만으로 동작합니다.
+
+요구사항:
+- Node.js 20 이상
+- Google Chrome 또는 Microsoft Edge (대부분의 OS 에 기본 설치됨)
 
 ---
 

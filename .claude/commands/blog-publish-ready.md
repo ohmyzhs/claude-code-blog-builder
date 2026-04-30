@@ -9,8 +9,9 @@ argument-hint: <폴더명>
 
 ## 1. 수치 사실 확인
 - `post.md` 에서 숫자·수치를 모두 추출
-- 각 숫자가 `knowledge/brand-facts.md` 또는 `knowledge/conversion-benchmarks.md` 에 있는지 확인
-- 없는 수치는 FAIL (픽션 금지)
+- `knowledge/brand-facts.md` 가 존재하면: 회사 고유 수치(자사 매출·고객수·업력 등)는 그 파일에 있어야 함. 없으면 FAIL.
+- `knowledge/brand-facts.md` 가 없거나 placeholder면: 본문에 회사 고유 수치(자사 매출·고객수·업력 등)가 박혀있는지 확인. 박혀있으면 출처 검증 불가이므로 FAIL.
+- 일반 시장 통계는 출처 명시 권장(REVIEW), `knowledge/conversion-benchmarks.md` 에 있으면 PASS.
 
 ## 2. 금칙어·최상급
 - `knowledge/banned-words.json` 로드
