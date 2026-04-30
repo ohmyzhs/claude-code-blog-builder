@@ -20,11 +20,10 @@ argument-hint: (인자 없음)
    - **Q1**: "이 카테고리의 주요 키워드 5~10개?" → `keyword-bank/{slug}.yml` 생성
    - **Q2**: "이 카테고리에 적용되는 법령/규제 단어가 있나요?" → `knowledge/banned-words.json` `domain_specific.words` 추가
    - **Q3**: "이 카테고리의 업계 벤치마크 수치 아시는 것?" → `knowledge/conversion-benchmarks.md` 업데이트
-4. **이미지 디자인 시스템** (선택, 5분):
-   - 브랜드 컬러 3개 (배경 / 메인 / 포인트, hex)
-   - 폰트 스타일 (산세리프 / 세리프 / 혼합)
-   - 로고 텍스트 (이미지에 박힐 정확한 표기 — 알파벳 대소문자 정확히)
-   - → `scripts/generate-images.js`의 BRAND_NAME, BG_COLOR, ACCENT_COLOR 상수 자동 치환
+4. **이미지 디자인 시스템** — 자동화되어 별도 설정 불필요:
+   - `image-designer` 서브에이전트가 글마다 6개 컬러 팔레트 중 무드에 맞는 것을 자동 선택
+   - 이미지에 브랜드명·로고를 박지 않으므로 BRAND_NAME 등의 변수 설정이 필요하지 않음
+   - 디자인 가이드는 [.claude/agents/image-designer.md](../agents/image-designer.md) 참조
 5. **medical-law-checker 활성화 여부**: 의료/뷰티/제약 카테고리 있으면 활성화 권장
 
 ## 출력물
@@ -34,7 +33,6 @@ argument-hint: (인자 없음)
 - `keyword-bank/<카테고리3>.yml`
 - `knowledge/banned-words.json` (도메인 단어 추가됨)
 - `knowledge/conversion-benchmarks.md` (벤치마크 채워짐)
-- `scripts/generate-images.js` (브랜드 시스템 치환됨)
 
 ## 완료 후 안내
 

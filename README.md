@@ -33,7 +33,8 @@ Claude Code 위에서 동작하는 한국어 블로그 자동화 시스템입니
 git clone https://github.com/shdsjh123-cpu/claude-code-blog-builder.git
 cd claude-code-blog-builder
 cp .env.example .env
-# .env 파일 열어서 GEMINI_API_KEY 채우기
+# .env 의 NAVER_CLIENT_ID/SECRET 은 선택. 이미지 API 키는 필요 없음.
+# (이미지는 시스템에 설치된 Chrome/Edge 로 직접 캡처)
 ```
 
 자세한 설치는 [INSTALL.md](INSTALL.md) 참조.
@@ -119,7 +120,7 @@ claude-code-blog-builder/
 
 - **Node.js 20+** (내장 fetch 필요)
 - **Claude Code** ([설치](https://docs.claude.com/en/docs/claude-code))
-- **Gemini API 키** ([무료 발급](https://aistudio.google.com))
+- **Google Chrome 또는 Microsoft Edge** (이미지 캡처용 — 대부분 OS 에 기본 설치)
 - **네이버 Search API** (선택, 없으면 웹 검색 대체)
 
 ---

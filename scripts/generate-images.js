@@ -1,30 +1,50 @@
 #!/usr/bin/env node
 /**
- * 블로그 이미지 생성기
- * Nano Banana Pro (Gemini 3 Pro Image) REST API 직접 호출.
- * 외부 의존성 없음 — Node 20+ 내장 fetch 사용.
+ * generate-images.js
  *
- * 브랜드 시스템은 환경 변수로 주입 (/setup-domain이 .env에 자동 작성):
- *   BRAND_NAME      — 이미지에 박힐 브랜드명 (정확한 표기, 대소문자 그대로)
- *   BRAND_BG_COLOR  — 배경색 hex (기본 #F7F6F2)
- *   BRAND_FG_COLOR  — 본문 텍스트 hex (기본 #1A1A1A)
- *   BRAND_ACCENT    — 포인트 색 hex (기본 #D97A3A)
+ * image-designer 에이전트가 작성한 4종 HTML을 headless Chrome 으로 캡처하여 PNG로 저장.
+ * 외부 의존성 0 — 시스템에 설치된 Chrome 또는 Edge 의 실행 파일을 직접 호출.
  *
  * Usage:
- *   GEMINI_API_KEY=xxx node scripts/generate-images.js \
- *     --title "..." --keyword "..." \
- *     --points "p1|||p2|||p3" \
- *     --quote "..." \
- *     --steps "s1|||s2|||s3" \
- *     --output "output/folder/images"
+ *   node scripts/generate-images.js \
+ *     --input  "output/2026-04-30_my-keyword/images/_html" \
+ *     --output "output/2026-04-30_my-keyword/images"
+ *
+ * 입력 디렉토리(<input>)는 image-designer 가 작성한 다음 4개 파일을 포함해야 함:
+ *   thumbnail.html, infographic.html, quote-card.html, process.html
+ *
+ * 각 HTML 파일의 <head> 에 캡처 사이즈를 지정할 수 있음:
+ *   <meta name="capture-size" content="1200x675">
+ *
+ * 메타가 없으면 파일명 기반 기본값 사용 (DEFAULT_SIZES 참조).
+ *
+ * 결과: <output>/{thumbnail,infographic,quote-card,process}.png
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile, readdir, mkdir, stat, access } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { join, resolve, basename } from 'node:path';
+import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
+
+// ────────────────────────────────────────────────
+// 설정
+// ────────────────────────────────────────────────
+
+const DEFAULT_SIZES = {
+  'thumbnail.html':   { width: 1200, height: 675  },  // 16:9
+  'infographic.html': { width: 1080, height: 1620 },  // 2:3
+  'quote-card.html':  { width: 1080, height: 1080 },  // 1:1
+  'process.html':     { width: 1200, height: 900  },  // 4:3
+};
+
+const CHROME_TIMEOUT_MS = 60_000;
 
 // ────────────────────────────────────────────────
 // CLI 파싱
 // ────────────────────────────────────────────────
+
 function parseArgs(argv) {
   const args = {};
   for (let i = 2; i < argv.length; i++) {
@@ -43,190 +63,219 @@ function parseArgs(argv) {
   return args;
 }
 
-const splitList = (s) =>
-  (s || '')
-    .split('|||')
-    .map((x) => x.trim())
-    .filter(Boolean);
-
 // ────────────────────────────────────────────────
-// 브랜드 시스템 (환경 변수 기반 — /setup-domain이 설정)
+// Chrome / Edge 실행 파일 자동 탐지
 // ────────────────────────────────────────────────
-const BRAND_NAME = process.env.BRAND_NAME || 'YOUR BRAND';
-const BG_COLOR   = process.env.BRAND_BG_COLOR || '#F7F6F2';
-const FG_COLOR   = process.env.BRAND_FG_COLOR || '#1A1A1A';
-const ACCENT     = process.env.BRAND_ACCENT   || '#D97A3A';
 
-const BRAND_STYLE = [
-  'Minimal Korean editorial infographic design',
-  `off-white background (${BG_COLOR}), deep charcoal (${FG_COLOR}) text, single point color (${ACCENT})`,
-  'premium clean sans-serif typography (Pretendard-like)',
-  'generous whitespace, clear visual hierarchy',
-  'information-diagram first: prefer charts, tables, flow nodes, comparison layouts over decorative illustration',
-  'NO people, NO stock-photo aesthetic, NO random clutter, NO fake logos, NO watermark, NO heavy gradient or glow',
-  'Korean text must render perfectly legible and sharp',
-  `The only brand name shown is exactly "${BRAND_NAME}" — use this exact spelling and capitalization`,
-].join('. ');
-
-function thumbnailPrompt({ title, keyword }) {
-  return [
-    `Create a 16:9 Korean blog thumbnail — editorial infographic style, not an illustration.`,
-    `Large bold Korean headline (must be perfectly legible): "${title}"`,
-    `Small pill-shaped tag in top-left corner with text: "${keyword}"`,
-    `Bottom-right corner small label: "${BRAND_NAME}"`,
-    `Add one subtle visual element that hints at data/diagram (e.g., a small bar chart, numbered badge, or flow arrow) — not a photo.`,
-    BRAND_STYLE,
-    `Layout: headline left-aligned, diagram element right side, balanced negative space.`,
-  ].join('\n');
+async function fileExists(p) {
+  try {
+    await access(p, fsConstants.X_OK);
+    return true;
+  } catch {
+    try {
+      await access(p, fsConstants.R_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
-function infographicPrompt({ keyword, points }) {
-  const numbered = points
-    .slice(0, 5)
-    .map((p, i) => `${i + 1}. ${p}`)
-    .join('\n');
-  return [
-    `Create a 2:3 vertical Korean infographic poster — pure information diagram, no decorative art.`,
-    `Top title in Korean: "${keyword} 핵심 포인트"`,
-    `Below the title, render these items as a vertical stack of numbered cards (rounded rectangles with a left accent bar), each with the number prominently displayed and the Korean text rendered clearly:`,
-    numbered,
-    `Bottom footer center: "${BRAND_NAME}"`,
-    BRAND_STYLE,
-    `Consistent spacing between cards, clear numeric hierarchy, no icons of people.`,
-  ].join('\n');
-}
-
-function quoteCardPrompt({ quote, keyword }) {
-  return [
-    `Create a 1:1 square Korean quote card — clean editorial typography focus.`,
-    `Small label at top in warm-orange: "${keyword}"`,
-    `Center the large Korean quote in bold sans-serif (not serif), perfectly legible: "${quote}"`,
-    `Bottom-right signature: "— ${BRAND_NAME}"`,
-    `Oversized decorative quotation marks as faint background element (very low opacity).`,
-    BRAND_STYLE,
-    `No people, no photographic elements.`,
-  ].join('\n');
-}
-
-function processPrompt({ keyword, steps }) {
-  const numberedSteps = steps
-    .slice(0, 6)
-    .map((s, i) => `${i + 1}) ${s}`)
-    .join('   →   ');
-  return [
-    `Create a 4:3 Korean horizontal process flow diagram — clean schematic, not an illustration.`,
-    `Top title in Korean: "${keyword} 진행 프로세스"`,
-    `Render this as a horizontal row of numbered pill-shaped nodes connected by arrows, each node containing its Korean label clearly:`,
-    numberedSteps,
-    `Each node: rounded rectangle with number badge + Korean label. Arrows between nodes in warm-orange.`,
-    `Bottom-right corner: "${BRAND_NAME}"`,
-    BRAND_STYLE,
-    `Pure schematic diagram, no background imagery, no people.`,
-  ].join('\n');
-}
-
-// ────────────────────────────────────────────────
-// Gemini 호출
-// ────────────────────────────────────────────────
-const MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview';
-
-async function generateOne(prompt) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-  };
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Gemini API ${res.status}: ${text.slice(0, 500)}`);
+async function findChrome() {
+  // 1) 환경변수 우선
+  if (process.env.CHROME_PATH && (await fileExists(process.env.CHROME_PATH))) {
+    return process.env.CHROME_PATH;
   }
 
-  const json = await res.json();
-  const parts = json?.candidates?.[0]?.content?.parts || [];
-  const imgPart = parts.find((p) => p.inlineData?.data);
-  if (!imgPart) {
-    throw new Error(
-      `No image in response: ${JSON.stringify(json).slice(0, 500)}`
+  const candidates = [];
+
+  if (process.platform === 'win32') {
+    const pf = process.env['ProgramFiles']        || 'C:\\Program Files';
+    const pfx = process.env['ProgramFiles(x86)']  || 'C:\\Program Files (x86)';
+    const local = process.env['LOCALAPPDATA']     || '';
+    candidates.push(
+      `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${pfx}\\Google\\Chrome\\Application\\chrome.exe`,
+      local && `${local}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${pf}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      `${pfx}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    );
+  } else if (process.platform === 'darwin') {
+    candidates.push(
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    );
+  } else {
+    candidates.push(
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/microsoft-edge',
+      '/snap/bin/chromium',
     );
   }
-  return Buffer.from(imgPart.inlineData.data, 'base64');
+
+  for (const c of candidates.filter(Boolean)) {
+    if (await fileExists(c)) return c;
+  }
+  return null;
+}
+
+// ────────────────────────────────────────────────
+// HTML 메타에서 capture-size 추출
+// ────────────────────────────────────────────────
+
+function readCaptureSize(html, filename) {
+  const m = html.match(
+    /<meta\s+name=["']capture-size["']\s+content=["'](\d+)x(\d+)["'][^>]*>/i,
+  );
+  if (m) {
+    return { width: parseInt(m[1], 10), height: parseInt(m[2], 10) };
+  }
+  return DEFAULT_SIZES[filename] || { width: 1200, height: 675 };
+}
+
+// ────────────────────────────────────────────────
+// Chrome headless 캡처 1회 실행
+// ────────────────────────────────────────────────
+
+function captureOne({ chromePath, htmlPath, pngPath, width, height }) {
+  return new Promise((res, rej) => {
+    const fileUrl = pathToFileURL(resolve(htmlPath)).href;
+
+    // 폰트(Google Fonts CDN) 로드 시간 확보 + 약간의 추가 대기
+    const args = [
+      '--headless=new',
+      '--disable-gpu',
+      '--hide-scrollbars',
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      `--window-size=${width},${height}`,
+      `--screenshot=${resolve(pngPath)}`,
+      '--virtual-time-budget=10000',  // 폰트·CSS 로드 대기 (ms)
+      '--default-background-color=00000000',
+      fileUrl,
+    ];
+
+    const child = spawn(chromePath, args, { windowsHide: true });
+
+    let stderr = '';
+    child.stderr.on('data', (b) => (stderr += b.toString()));
+
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      rej(new Error(`Chrome timeout (${CHROME_TIMEOUT_MS}ms): ${htmlPath}`));
+    }, CHROME_TIMEOUT_MS);
+
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      rej(e);
+    });
+
+    child.on('exit', (code) => {
+      clearTimeout(timer);
+      if (code === 0) res();
+      else rej(new Error(`Chrome exited ${code}\n${stderr.slice(0, 600)}`));
+    });
+  });
 }
 
 // ────────────────────────────────────────────────
 // 메인
 // ────────────────────────────────────────────────
+
 async function main() {
   const args = parseArgs(process.argv);
-  const { title, keyword, quote, output } = args;
-  const points = splitList(args.points);
-  const steps = splitList(args.steps);
+  const inputDir = args.input;
+  const outputDir = args.output;
 
-  if (!title || !keyword || !output) {
+  if (!inputDir || !outputDir) {
     console.error(
-      'Usage: --title <t> --keyword <k> --output <dir> [--points a|||b] [--quote q] [--steps a|||b]'
+      'Usage: node scripts/generate-images.js --input <html_dir> --output <png_dir>',
     );
     process.exit(2);
   }
-  if (!process.env.GEMINI_API_KEY) {
-    console.error('ERROR: GEMINI_API_KEY environment variable is required.');
+
+  // 입력 디렉토리 검증
+  try {
+    const s = await stat(inputDir);
+    if (!s.isDirectory()) throw new Error('not a directory');
+  } catch {
+    console.error(`ERROR: --input '${inputDir}' 가 디렉토리가 아닙니다.`);
+    console.error(
+      `먼저 image-designer 에이전트를 실행해서 4개 HTML 파일을 작성하세요.`,
+    );
     process.exit(1);
   }
 
-  await mkdir(output, { recursive: true });
+  // Chrome 탐지
+  const chromePath = await findChrome();
+  if (!chromePath) {
+    console.error('ERROR: Chrome 또는 Edge 를 찾지 못했습니다.');
+    console.error('해결:');
+    console.error('  - Windows: Google Chrome 또는 Microsoft Edge 설치');
+    console.error('  - Mac    : Google Chrome 설치 (/Applications)');
+    console.error('  - Linux  : apt install chromium-browser  또는  google-chrome');
+    console.error('  - 또는 환경변수 CHROME_PATH 로 직접 지정');
+    process.exit(1);
+  }
+  console.log(`browser: ${chromePath}\n`);
 
-  const jobs = [
-    { name: 'thumbnail', prompt: thumbnailPrompt({ title, keyword }) },
-    {
-      name: 'infographic',
-      prompt: infographicPrompt({
-        keyword,
-        points: points.length ? points : [keyword],
-      }),
-    },
-    {
-      name: 'quote-card',
-      prompt: quoteCardPrompt({
-        quote: quote || title,
-        keyword,
-      }),
-    },
-    {
-      name: 'process',
-      prompt: processPrompt({
-        keyword,
-        steps: steps.length ? steps : ['리서치', '기획', '제작', '검수'],
-      }),
-    },
-  ];
+  await mkdir(outputDir, { recursive: true });
+
+  // 입력 디렉토리에서 *.html 수집
+  const entries = await readdir(inputDir);
+  const htmlFiles = entries.filter((f) => f.toLowerCase().endsWith('.html'));
+
+  if (htmlFiles.length === 0) {
+    console.error(`ERROR: '${inputDir}' 에 .html 파일이 없습니다.`);
+    process.exit(1);
+  }
 
   let okCount = 0;
   const errors = [];
 
-  for (const job of jobs) {
+  for (const filename of htmlFiles) {
+    const htmlPath = join(inputDir, filename);
+    const pngName = filename.replace(/\.html?$/i, '.png');
+    const pngPath = join(outputDir, pngName);
+
     try {
-      console.log(`[generate] ${job.name} ...`);
-      const buf = await generateOne(job.prompt);
-      const path = join(output, `${job.name}.png`);
-      await writeFile(path, buf);
-      console.log(`  ✓ ${path} (${buf.length} bytes)`);
+      const html = await readFile(htmlPath, 'utf-8');
+      const { width, height } = readCaptureSize(html, basename(filename));
+
+      console.log(`[capture] ${filename}  →  ${pngName}  (${width}×${height})`);
+      await captureOne({ chromePath, htmlPath, pngPath, width, height });
+
+      const stats = await stat(pngPath).catch(() => null);
+      const bytes = stats ? stats.size : 0;
+      if (bytes < 1000) {
+        throw new Error(`PNG 파일이 너무 작음 (${bytes} bytes) — 캡처 실패 가능`);
+      }
+      console.log(`  ✓ ${pngPath}  (${(bytes / 1024).toFixed(1)} KB)`);
       okCount++;
     } catch (e) {
-      console.error(`  ✗ ${job.name}: ${e.message}`);
-      errors.push({ name: job.name, error: e.message });
+      console.error(`  ✗ ${filename}: ${e.message}`);
+      errors.push({ filename, error: e.message });
     }
   }
 
-  console.log(`\nDone: ${okCount}/${jobs.length} images saved to ${output}`);
-  if (errors.length === jobs.length) process.exit(1);
+  console.log(
+    `\nDone: ${okCount}/${htmlFiles.length} images captured to ${outputDir}`,
+  );
+
+  if (errors.length === htmlFiles.length) {
+    console.error('\n전체 실패. 위 에러 메시지를 확인하세요.');
+    process.exit(1);
+  }
+  if (errors.length > 0) {
+    console.error(`\n부분 실패 ${errors.length}건:`);
+    for (const e of errors) console.error(`  - ${e.filename}: ${e.error}`);
+    process.exit(0); // 부분 성공은 0 (호출자가 실패 파일 수를 stdout 으로 판단)
+  }
 }
 
 main().catch((e) => {
