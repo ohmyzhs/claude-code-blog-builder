@@ -1,7 +1,7 @@
 # Claude Code Blog Builder
 
 이 프로젝트는 Claude Code에서 직접 실행하는 블로그 콘텐츠 자동화 도구입니다.
-사용자가 "이 키워드로 블로그 글 만들어줘"라고 요청하면 키워드 리서치 → 초안 생성 → 이미지 생성 → 품질 검증 → 발행 어시스턴트까지 수행합니다.
+사용자가 "이 키워드로 블로그 글 만들어줘"라고 요청하면 키워드 리서치 → 초안 생성 → 이미지 프롬프트 작성 → 품질 검증 → 발행 어시스턴트까지 수행합니다.
 
 > ⚠️ **이 시스템은 1개 블로그를 직접 운영하는 경우에 최적화되어 있습니다.**
 > 멀티 카테고리 운영, 저품질 복구, 발행 스케줄링, 외주팀 워크플로우 등은 상위 솔루션이 필요합니다.
@@ -160,32 +160,16 @@ API 인증 실패 시 웹 검색 기반으로 대체 리서치.
 2. `post.html` — 스마트에디터 붙여넣기용 HTML
 3. `metadata.json` — 제목, 태그, 메타설명, 키워드 리포트
 4. `guide.md` — 편집 가이드 (이미지 위치, 수정 포인트)
+5. `image-prompts.json` — 마커 위치별 영문 이미지 프롬프트 (STEP 3)
 
-### STEP 3: 이미지 생성
+### STEP 3: 이미지 프롬프트 작성 (API 호출 안 함)
 
-Nano Banana Pro (Gemini 3 Pro Image) API 사용. 외부 의존성 0.
+이미지 자동 생성 API는 사용하지 않습니다. 대신 본문의 각 `[IMAGE: ...]` 마커마다 사용자가 **Nano Banana 2 / gpt-image-2** 에 직접 붙여넣어 생성할 **영문 프롬프트**를 작성해 `output/폴더/image-prompts.json` 으로 저장합니다. (절차·스키마는 `/blog-new` 커맨드의 STEP 3 참조.)
 
-브랜드 시스템은 `.env`로 주입 (`/setup-domain`이 자동 설정):
-- `BRAND_NAME` — 이미지에 박힐 브랜드명
-- `BRAND_BG_COLOR` / `BRAND_FG_COLOR` / `BRAND_ACCENT` — 컬러팔레트
-
-```bash
-GEMINI_API_KEY=your_key node scripts/generate-images.js \
-  --title "글 제목" \
-  --keyword "키워드" \
-  --points "포인트1|||포인트2|||포인트3" \
-  --quote "핵심 문구" \
-  --steps "단계1|||단계2|||단계3" \
-  --output "output/폴더/images"
-```
-
-생성 이미지 4종:
-1. **썸네일** (16:9) — 메인 키워드 + 브랜드 로고
-2. **인포그래픽** (2:3) — 핵심 포인트 시각화
-3. **인용 카드** (1:1) — 핵심 문구 강조
-4. **프로세스 다이어그램** (4:3) — 단계별 시각화
-
-매번 고유 이미지 (동일 이미지 재사용은 네이버 유사 문서 판정 트리거).
+- 마커 위치별 문맥에 맞춰 스타일을 고름: 데이터/단계 → 인포그래픽·다이어그램, 상황 묘사 → 실사 사진, 개념·스토리 → 일러스트·4컷 만화.
+- 마커당 서로 다른 스타일 옵션 2~3개를 제공.
+- 인포그래픽 계열엔 브랜드 팔레트(`.env`의 `BRAND_*`)를 녹여 통일감 유지.
+- (참고) `scripts/generate-images.js` 는 API 키가 있을 때 쓰는 별도 도구로 남겨두되, 파이프라인에서는 호출하지 않음.
 
 ### STEP 4: 품질 검증 + 유사도 검사
 
@@ -234,11 +218,7 @@ output/2026-04-08_my-keyword/
 ├── post.html
 ├── metadata.json
 ├── guide.md
-├── images/
-│   ├── thumbnail.png
-│   ├── infographic.png
-│   ├── quote-card.png
-│   └── process.png
+├── image-prompts.json   # 마커별 영문 이미지 프롬프트 (직접 생성용)
 └── quality-report.json
 ```
 
@@ -253,8 +233,8 @@ output/2026-04-08_my-keyword/
 NAVER_CLIENT_ID=your_client_id
 NAVER_CLIENT_SECRET=your_client_secret
 
-# Nano Banana Pro 이미지 생성 (필수)
-# Google AI Studio (aistudio.google.com)에서 무료 발급
+# Nano Banana Pro 이미지 생성 (선택 — 파이프라인은 API 대신 영문 프롬프트만 작성)
+# generate-images.js를 수동으로 쓸 때만 필요. Google AI Studio에서 무료 발급.
 GEMINI_API_KEY=your_gemini_api_key
 
 # 브랜드 시스템 (/setup-domain이 자동 설정)
