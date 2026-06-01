@@ -53,14 +53,15 @@ ls .claude/commands/setup.md
 
 ## 글 생성 단계
 
-### 7. `GEMINI_API_KEY is not set`
-**원인**: `.env` 파일 미생성 또는 키 미입력
+### 7. `Chrome 또는 Edge 를 찾지 못했습니다`
+**원인**: 시스템에 Chrome / Edge 가 설치돼 있지 않거나 자동 탐지 경로에 없음
 **해결**:
-```bash
-cp .env.example .env
-# .env 열어서 GEMINI_API_KEY=실제키 입력
-```
-키 발급: https://aistudio.google.com (무료)
+1. Google Chrome 또는 Microsoft Edge 를 설치 (대부분 OS 에 기본 설치)
+2. 그래도 안 잡히면 `.env` 에 직접 경로 지정:
+   ```
+   CHROME_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
+   ```
+3. Linux: `apt install chromium-browser` 또는 `apt install google-chrome-stable`
 
 ### 8. 네이버 API `code: '024'` 인증 실패
 **원인**: NAVER_CLIENT_ID/SECRET 잘못됨 또는 일일 호출 한도 초과
@@ -70,11 +71,12 @@ cp .env.example .env
 3. 일시적이면 시스템이 자동으로 WebSearch 대체 모드로 전환합니다 (키 없어도 동작)
 
 ### 9. 글에 회사 정보가 안 들어감
-**원인**: `knowledge/brand-facts.md`가 placeholder 상태
-**해결**: `/setup` 실행. 5분.
+**원인**: `knowledge/brand-facts.md`가 없거나 placeholder 상태
+**동작**: 이 경우 시스템이 회사 고유 수치를 박지 않는 **일반 가이드 모드**로 글을 씁니다(중단되지 않음).
+**원하면**: `/setup` 5분 인터뷰로 회사 정보를 등록하면 그때부터 자사 수치를 본문에 사용합니다.
 ```bash
 cat knowledge/brand-facts.md | head -3
-# [PLACEHOLDER]로 시작하면 /setup 미실행
+# 파일이 없거나 [PLACEHOLDER]로 시작하면 일반 모드로 동작
 ```
 
 ### 10. 글에 데모/예시 회사명이나 수치가 들어감
@@ -113,18 +115,19 @@ node scripts/quality-check.js --file output/폴더/post.md --keyword "키워드"
 
 ## 이미지 생성 단계
 
-### 14. 이미지에 잘못된 브랜드명이 박힘
-**원인**: `.env`의 `BRAND_NAME`이 빈 값 또는 잘못됨
+### 14. 이미지가 캡처는 됐는데 한글이 □□□ 로 깨져 보임
+**원인**: 시스템에 한국어 폰트가 부족하거나 Pretendard 가 Google Fonts CDN 에서 로드되지 않음
 **해결**:
-```bash
-grep BRAND_NAME .env
-# BRAND_NAME=정확한브랜드이름
-```
-또는 `/setup-domain` 다시 실행.
+1. 시스템 폰트 확인: Windows 는 Malgun Gothic, Mac 은 Apple SD Gothic Neo, Linux 는 `apt install fonts-noto-cjk` 로 Noto Sans KR 설치
+2. 인터넷 연결이 차단된 환경이면 Google Fonts CDN 이 안 닿아 Pretendard 가 로드 안 됨 — 그래도 시스템 폰트 fallback 으로 한국어는 정상 렌더돼야 함
+3. 로컬에 Pretendard 를 설치하면 가장 깔끔: https://github.com/orioncactus/pretendard
 
-### 15. Gemini API rate limit
-**원인**: 무료 plan 일일 한도 초과
-**해결**: 24시간 대기 또는 유료 plan 전환. https://aistudio.google.com → API keys → quota 확인.
+### 15. 이미지 PNG 파일이 비정상적으로 작음 (1KB 미만)
+**원인**: headless Chrome 캡처가 빈 페이지를 캡처했거나 HTML 에 오류
+**해결**:
+1. `output/<폴더>/images/_html/*.html` 을 직접 브라우저에서 열어 시각적 확인
+2. `<html>`/`<body>` 의 width/height 가 `<meta name="capture-size">` 와 일치하는지 확인
+3. 콘솔에 에러가 있으면 image-designer 에이전트에게 재디자인 요청
 
 ---
 

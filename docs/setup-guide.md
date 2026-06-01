@@ -67,11 +67,8 @@ Phase 3 (선택, 15분)  →  /setup-domain   # 카테고리/벤치마크/이미
 2. **Q2**: 이 카테고리에 적용되는 법령/규제 단어?  → `knowledge/banned-words.json`에 추가
 3. **Q3**: 이 카테고리 업계 벤치마크 수치?  → `knowledge/conversion-benchmarks.md` 업데이트
 
-**이미지 디자인 시스템 (선택, 5분)**:
-- 브랜드 컬러 3개 hex (배경 / 본문 / 포인트)
-- 폰트 스타일 (산세리프 / 세리프 / 혼합)
-- 로고 텍스트 (이미지에 박힐 정확한 표기)
-- → `.env`의 `BRAND_NAME`, `BRAND_BG_COLOR`, `BRAND_FG_COLOR`, `BRAND_ACCENT` 자동 채움
+**이미지 디자인 시스템 — 자동화됨 (별도 설정 불필요)**:
+이미지는 `image-designer` 서브에이전트가 글마다 6개 컬러 팔레트 중 무드에 맞는 것을 매번 자동 선택합니다. 브랜드명·로고는 박지 않으므로 별도 설정이 필요하지 않습니다. `image-designer` 의 디자인 가이드는 [.claude/agents/image-designer.md](../.claude/agents/image-designer.md) 참조.
 
 **의료/뷰티 카테고리 권장**: `medical-law-checker` 서브에이전트 활성화. 의료법 위반 한 번 걸리면 사업이 망합니다.
 

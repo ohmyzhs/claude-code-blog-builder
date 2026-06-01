@@ -10,13 +10,13 @@ tools: Read, Bash, Grep
 
 1. `scripts/quality-check.js --file <post.md> --keyword <키워드>` 실행
 2. `scripts/duplicate-check.js --file <post.md>` 실행
-3. `knowledge/tone-samples/real-blog-posts.txt` Read → 실제 회사 톤 재학습
-4. `knowledge/brand-facts.md` Read → 수치 검증
+3. `knowledge/tone-samples/real-blog-posts.txt` Read (있을 경우) → 실제 회사 톤 재학습
+4. `knowledge/brand-facts.md` Read (있을 경우) → 수치 검증. 없거나 placeholder면 이 단계는 스킵하고 평가 항목 1번 기준을 변경.
 5. 글 본문을 직접 Read 해서 아래 10항목 평가
 
 ## 10개 평가 항목 (각 1~10점)
 
-1. **수치 정확성** — brand-facts.md에 있는 숫자만 썼나
+1. **수치 정확성** — `brand-facts.md`가 있으면: 그 파일에 있는 숫자만 썼나. 없으면: 검증 불가능한 회사 고유 수치(자사 매출·고객수 등)를 만들어내지 않았나
 2. **시그니처 톤 일치도** — tone-samples의 회사 시그니처 표현이 2개 이상 자연 삽입됐나
 3. **도입부 4줄 공식** — 문제·손실·자격·얻을 것 모두 있나
 4. **A.E.A 구조** — 권위·근거·행동 3층이 명확한가
