@@ -44,11 +44,19 @@ function check(text, raw, keyword) {
   const results = [];
   const charCount = text.replace(/\s/g, '').length;
 
-  // 1. 글자수
+  // 1. 글자수 (목표 3,500~4,000자, 공백 제외)
+  const CHAR_MIN = 3500;
+  const CHAR_MAX = 4000;
+  const charDetail =
+    charCount < CHAR_MIN
+      ? `공백제외 ${charCount}자 — 목표 ${CHAR_MIN}~${CHAR_MAX}자에 미달 (${CHAR_MIN - charCount}자 부족)`
+      : charCount > CHAR_MAX
+        ? `공백제외 ${charCount}자 — 목표 ${CHAR_MIN}~${CHAR_MAX}자 상한 초과(${charCount - CHAR_MAX}자), 분량 조절 권장`
+        : `공백제외 ${charCount}자 (목표 ${CHAR_MIN}~${CHAR_MAX}자)`;
   results.push({
     name: '글자수',
-    pass: charCount >= 1500,
-    detail: `공백제외 ${charCount}자 (목표 ≥ 1500)`,
+    pass: charCount >= CHAR_MIN,
+    detail: charDetail,
   });
 
   // 2. 키워드 밀도
